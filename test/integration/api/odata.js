@@ -480,7 +480,7 @@ describe('api: /forms/:id.svc', () => {
 
     it('should return subtable results with selected properties', testService((service) =>
       withSubmission(service, (asAlice) =>
-        asAlice.get("/v1/projects/1/forms/doubleRepeat.svc/Submissions('double')/children/child('b6e93a81a53eed0566e65e472d4a4b9ae383ee6d')/toys/toy?$select=name")
+        asAlice.get("/v1/projects/1/forms/doubleRepeat.svc/Submissions('double')/children/child?$select=name")
           .expect(200)
           .then(({ body }) => {
             body.should.eql({
@@ -488,11 +488,26 @@ describe('api: /forms/:id.svc', () => {
               value: [{
                   "name": "Alice"
                 }, {
-                  "name": "Pinkie Pie"
+                  "name": "Bob"
                 }, {
-                  "name": "Applejack"
+                  "name": "Chelsea"
+                }]
+            });
+          }))));
+
+    it.only('should return subtable results with selected properties2', testService((service) =>
+      withSubmission(service, (asAlice) =>
+        asAlice.get("/v1/projects/1/forms/doubleRepeat.svc/Submissions('double')/children/child('8954b393f82c1833abb19be08a3d6cb382171f54')/toys/toy?$select=name")
+          .expect(200)
+          .then(({ body }) => {
+            body.should.eql({
+              '@odata.context': 'http://localhost:8989/v1/projects/1/forms/doubleRepeat.svc/$metadata#Submissions.children.child.toys.toy',
+              value: [{
+                  "name": "Rainbow Dash"
                 }, {
-                  "name": "Spike"
+                  "name": "Rarity"
+                }, {
+                  "name": "Fluttershy"
                 }]
             });
           }))));
