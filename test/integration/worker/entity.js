@@ -2,12 +2,13 @@ const appRoot = require('app-root-path');
 const { sql } = require('slonik');
 const should = require('should');
 
-const { testService } = require('../setup');
+const { testService, testServiceWithQueries } = require('../setup');
 // eslint-disable-next-line import/no-dynamic-require
 const testData = require(appRoot + '/test/data/xml.js');
 // eslint-disable-next-line import/no-dynamic-require
 const { exhaust } = require(appRoot + '/lib/worker/worker');
-
+// eslint-disable-next-line import/no-dynamic-require
+let Entities = require(appRoot + '/lib/model/query/entities');
 
 describe('worker: entity', () => {
   describe('should not make an entity or log anything about entities', () => {
@@ -291,6 +292,44 @@ describe('worker: entity', () => {
         should.not.exist(event.details.problem);
         event.details.errorMessage.should.equal('SQL tag cannot be bound an undefined value.');
       }));
+
+      it.skip('should retry to process approve submission event', testServiceWithQueries(
+        {
+          Entities: {
+            ...Entities,
+            createNew: () => { throw 'Database is down' }
+          }
+        }, async (service, container) => {
+          await service.login('alice', (asAlice) =>
+            asAlice.post('/v1/projects/1/forms?publish=true')
+              .send(testData.forms.simpleEntity)
+              .set('Content-Type', 'application/xml')
+              .expect(200)
+              .then(() => asAlice.post('/v1/projects/1/forms/simpleEntity/submissions')
+                .send(testData.instances.simpleEntity.one)
+                .set('Content-Type', 'application/xml')
+                .expect(200)));
+
+          await service.login('bob', (asBob) =>
+            asBob.patch('/v1/projects/1/forms/simpleEntity/submissions/one')
+              .send({ reviewState: 'approved' })
+              .expect(200));
+
+          await exhaust(container);
+
+          const updateEvent = await container.Audits.getLatestByAction('submission.update').then((o) => o.get());
+          // Since Entities.createNew is failing because of database failure
+          // we should retry processing the event. 
+          //
+          // Database failure could be a transient failure or a disaster. In 
+          // case of a transient failure we would see audit log with the error 
+          // details, if database is up by then. In case of disaster, event 
+          // will remain unprocessed and whenever dataset is back up, event 
+          // will be processed. 
+          should.not.exist(updateEvent.processed);
+          updateEvent.failures.should.equal(5);
+        }));
+
     });
   });
 

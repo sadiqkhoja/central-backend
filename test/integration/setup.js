@@ -137,14 +137,23 @@ const augment = (service) => {
 
 ////////////////////////////////////////////////////////////////////////////////
 // FINAL TEST WRAPPERS
-
-const baseContainer = withDefaults({ db, mail, env, xlsform, google, bcrypt, enketo, Sentry, odkAnalytics });
+const base = { db, mail, env, xlsform, google, bcrypt, enketo, Sentry, odkAnalytics };
+const baseContainer = withDefaults(base);
 
 // called to get a service context per request. we do some work to hijack the
 // transaction system so that each test runs in a single transaction that then
 // gets rolled back for a clean slate on the next test.
 const testService = (test) => () => new Promise((resolve, reject) => {
   baseContainer.transacting((container) => {
+    const rollback = (f) => (x) => container.run(sql`rollback`).then(() => f(x));
+    return test(augment(request(service(container))), container).then(rollback(resolve), rollback(reject));
+  });//.catch(Promise.resolve.bind(Promise)); // TODO/SL probably restore
+});
+
+// could have added `queries` parameter above but that makes 
+// consumption of that func a bit awkward 
+const testServiceWithQueries = (queries, test) => () => new Promise((resolve, reject) => {
+  withDefaults(base, queries).transacting((container) => {
     const rollback = (f) => (x) => container.run(sql`rollback`).then(() => f(x));
     return test(augment(request(service(container))), container).then(rollback(resolve), rollback(reject));
   });//.catch(Promise.resolve.bind(Promise)); // TODO/SL probably restore
@@ -189,5 +198,5 @@ const testTask = (test) => () => new Promise((resolve, reject) => {
   });//.catch(Promise.resolve.bind(Promise));
 });
 
-module.exports = { testService, testServiceFullTrx, testContainer, testContainerFullTrx, testTask };
+module.exports = { testService, testServiceFullTrx, testContainer, testContainerFullTrx, testTask, testServiceWithQueries };
 
